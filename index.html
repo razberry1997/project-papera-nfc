@@ -36,6 +36,8 @@
 
   /* ---- KIOSK RIPOSO ---- */
   .papera-grande { font-size: 110px; line-height: 1; animation: galleggia 3s ease-in-out infinite; }
+  .logo-img { height: 42vh; max-height: 380px; animation: galleggia 3s ease-in-out infinite; }
+  .logo-img.mini { height: 24vh; max-height: 200px; animation: none; }
   @keyframes galleggia {
     0%, 100% { transform: translateY(0) rotate(-3deg); }
     50% { transform: translateY(-14px) rotate(3deg); }
@@ -120,7 +122,7 @@
 
 <!-- KIOSK: riposo -->
 <div id="schermata-riposo" class="schermata attiva">
-  <div class="papera-grande">🦆</div>
+  <img class="logo-img" src="logo.png" alt="logo">
   <h1>Appoggia la tua paperella</h1>
   <p class="sottotitolo">e colleziona i tuoi punti 💅</p>
   <button id="btn-avvia" class="btn">Avvia scansione</button>
@@ -129,7 +131,7 @@
 
 <!-- KIOSK: risultato tap -->
 <div id="schermata-tap" class="schermata">
-  <div class="papera-grande" style="animation:none">🦆</div>
+  <img class="logo-img mini" src="logo.png" alt="logo">
   <h1 id="tap-titolo">Ciao!</h1>
   <div class="punti-num" id="tap-punti">0/10</div>
   <div class="timbri" id="tap-timbri"></div>
@@ -173,6 +175,7 @@ const PUNTI_PREMIO = 10;
 const COOLDOWN_ORE = 3;
 const PIN_DEFAULT = '1234';
 const TIMEOUT_RITORNO_MS = 5000;
+const ORA_BACKUP = 18; // backup automatico giornaliero alle 18:00
 
 // ================== INDEXEDDB ==================
 let db;
@@ -440,15 +443,45 @@ function mini(txt, fn) {
 }
 
 // ================== BACKUP ==================
-async function esportaBackup() {
-  const dati = {
+async function creaDatiBackup() {
+  return {
     versione: 1,
     esportato: new Date().toISOString(),
     clienti: await tuttiClienti(),
     log_tap: await tuttiLog()
   };
+}
+
+function scaricaJSON(dati, nomeFile) {
+  const blob = new Blob([JSON.stringify(dati, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nomeFile;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const oggiStr = () => {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+
+async function backupAutomatico() {
+  const oggi = oggiStr();
+  const ultimo = await getConfig('ultimo_backup', '');
+  if (ultimo === oggi) return;
+  if (new Date().getHours() < ORA_BACKUP) return;
+  const dati = await creaDatiBackup();
+  if (!dati.clienti || !dati.clienti.length) return; // niente da salvare
+  scaricaJSON(dati, 'paperelle-backup-' + oggi + '.json');
+  await setConfig('ultimo_backup', oggi);
+  toast('💾 Backup giornaliero salvato in Download');
+}
+
+async function esportaBackup() {
+  const dati = await creaDatiBackup();
   const json = JSON.stringify(dati, null, 2);
-  const nomeFile = 'paperelle-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  const nomeFile = 'paperelle-backup-' + oggiStr() + '.json';
   const blob = new Blob([json], { type: 'application/json' });
   const file = new File([blob], nomeFile, { type: 'application/json' });
 
@@ -501,7 +534,10 @@ document.getElementById('btn-avvia').addEventListener('click', async () => {
   await tieniSchermoAcceso();
 });
 
-apriDB().catch(err => toast('Errore database: ' + err.message, 5000));
+apriDB().then(() => {
+  // controlla ogni minuto se è ora del backup giornaliero
+  setInterval(() => backupAutomatico().catch(() => {}), 60 * 1000);
+}).catch(err => toast('Errore database: ' + err.message, 5000));
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
