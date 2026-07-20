@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f8b4d9">
+<title>Paperelle Fedeltà 🦆</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root {
+    --rosa: #f8b4d9;
+    --rosa-scuro: #e91e8c;
+    --viola: #7c3aed;
+    --verde: #10b981;
+    --bg: #fdf2f8;
+    --testo: #4a154b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--testo);
+    user-select: none;
+  }
+  .schermata {
+    position: absolute; inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+  }
+  .schermata.attiva { display: flex; }
+
+  /* ---- KIOSK RIPOSO ---- */
+  .papera-grande { font-size: 110px; line-height: 1; animation: galleggia 3s ease-in-out infinite; }
+  @keyframes galleggia {
+    0%, 100% { transform: translateY(0) rotate(-3deg); }
+    50% { transform: translateY(-14px) rotate(3deg); }
+  }
+  h1 { font-size: 28px; margin-top: 20px; }
+  .sottotitolo { font-size: 17px; opacity: .7; margin-top: 8px; }
+  .btn {
+    border: none; border-radius: 999px;
+    padding: 16px 36px; font-size: 19px; font-weight: 700;
+    background: var(--rosa-scuro); color: #fff;
+    margin-top: 28px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(233, 30, 140, .35);
+  }
+  .btn:active { transform: scale(.96); }
+  .btn.secondario { background: #fff; color: var(--rosa-scuro); border: 2px solid var(--rosa-scuro); box-shadow: none; }
+  .btn.piccolo { padding: 10px 20px; font-size: 15px; margin-top: 12px; }
+  .stato-scan {
+    margin-top: 18px; font-size: 15px; font-weight: 600;
+    padding: 8px 18px; border-radius: 999px; background: #fff;
+  }
+  .stato-scan.on { color: var(--verde); }
+  .stato-scan.off { color: #b91c1c; }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+  /* ---- RISULTATO TAP ---- */
+  #schermata-tap { background: linear-gradient(160deg, var(--rosa), #fbcfe8); }
+  .punti-num { font-size: 64px; font-weight: 800; color: var(--rosa-scuro); margin-top: 10px; }
+  .timbri { display: flex; gap: 8px; margin-top: 22px; flex-wrap: wrap; justify-content: center; max-width: 320px; }
+  .timbro {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; opacity: .35;
+  }
+  .timbro.pieno { opacity: 1; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  .timbro.nuovo { animation: pop .5s cubic-bezier(.2, 2, .4, 1); }
+  @keyframes pop { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+
+  /* ---- PREMIO ---- */
+  #schermata-premio { background: linear-gradient(160deg, #fde68a, var(--rosa)); }
+  .premio-emoji { font-size: 100px; animation: festa .6s ease infinite alternate; }
+  @keyframes festa { from { transform: rotate(-8deg) scale(1); } to { transform: rotate(8deg) scale(1.15); } }
+
+  /* ---- ADMIN ---- */
+  #schermata-admin {
+    justify-content: flex-start; align-items: stretch;
+    text-align: left; overflow-y: auto; background: #fff; padding: 16px;
+  }
+  .admin-testata { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .admin-testata h2 { font-size: 22px; }
+  .chiudi { background: #eee; border: none; border-radius: 50%; width: 40px; height: 40px; font-size: 18px; cursor: pointer; }
+  .admin-azioni { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .admin-azioni .btn { margin-top: 0; padding: 10px 16px; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px 6px; border-bottom: 1px solid #f3e8ff; text-align: left; vertical-align: middle; }
+  th { font-size: 12px; text-transform: uppercase; opacity: .6; }
+  .uid { font-family: monospace; font-size: 11px; word-break: break-all; }
+  .cella-punti { font-weight: 800; font-size: 18px; color: var(--rosa-scuro); white-space: nowrap; }
+  .mini-btn {
+    border: none; background: var(--bg); color: var(--testo);
+    border-radius: 8px; width: 32px; height: 32px; font-size: 16px; font-weight: 700;
+    cursor: pointer; margin: 0 2px;
+  }
+  .mini-btn.rosso { color: #b91c1c; }
+  .nome-input { border: 1px solid #eee; border-radius: 8px; padding: 6px; width: 90px; font-size: 13px; }
+  .vuoto { text-align: center; opacity: .5; padding: 30px 0; }
+  #ingresso-admin {
+    position: fixed; bottom: 0; right: 0; width: 64px; height: 64px;
+    opacity: 0; z-index: 50;
+  }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--testo); color: #fff; padding: 12px 22px;
+    border-radius: 999px; font-size: 14px; z-index: 100;
+    opacity: 0; transition: opacity .3s; pointer-events: none;
+    max-width: 90vw;
+  }
+  .toast.visibile { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- KIOSK: riposo -->
+<div id="schermata-riposo" class="schermata attiva">
+  <div class="papera-grande">🦆</div>
+  <h1>Appoggia la tua paperella</h1>
+  <p class="sottotitolo">e colleziona i tuoi punti 💅</p>
+  <button id="btn-avvia" class="btn">Avvia scansione</button>
+  <div id="stato-scan" class="stato-scan off">Scansione non attiva</div>
+</div>
+
+<!-- KIOSK: risultato tap -->
+<div id="schermata-tap" class="schermata">
+  <div class="papera-grande" style="animation:none">🦆</div>
+  <h1 id="tap-titolo">Ciao!</h1>
+  <div class="punti-num" id="tap-punti">0/10</div>
+  <div class="timbri" id="tap-timbri"></div>
+  <p class="sottotitolo" id="tap-msg"></p>
+</div>
+
+<!-- KIOSK: premio -->
+<div id="schermata-premio" class="schermata">
+  <div class="premio-emoji">🎉</div>
+  <h1>PREMIO!</h1>
+  <p class="sottotitolo" style="font-size:20px">Hai completato la tessera!<br>Ritira il tuo premio in cassa 🎁</p>
+</div>
+
+<!-- ADMIN -->
+<div id="schermata-admin" class="schermata">
+  <div class="admin-testata">
+    <h2>Gestione clienti</h2>
+    <button class="chiudi" onclick="chiudiAdmin()">✕</button>
+  </div>
+  <div class="admin-azioni">
+    <button class="btn" onclick="esportaBackup()">⬇️ Export backup</button>
+    <button class="btn secondario" onclick="document.getElementById('file-import').click()">⬆️ Import</button>
+    <button class="btn secondario" onclick="cambiaPin()">🔑 Cambia PIN</button>
+    <input type="file" id="file-import" accept=".json,application/json" hidden onchange="importaBackup(this)">
+  </div>
+  <table>
+    <thead><tr><th>Cliente</th><th>Punti</th><th>Ultimo tap</th><th></th></tr></thead>
+    <tbody id="tabella-clienti"></tbody>
+  </table>
+</div>
+
+<!-- angolo invisibile per entrare in admin (5 tap) -->
+<div id="ingresso-admin"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+'use strict';
+
+// ================== CONFIG ==================
+const PUNTI_PREMIO = 10;
+const COOLDOWN_ORE = 3;
+const PIN_DEFAULT = '1234';
+const TIMEOUT_RITORNO_MS = 5000;
+
+// ================== INDEXEDDB ==================
+let db;
+
+function apriDB() {
+  return new Promise((ok, ko) => {
+    const req = indexedDB.open('paperelle', 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('clienti'))
+        d.createObjectStore('clienti', { keyPath: 'uid' });
+      if (!d.objectStoreNames.contains('log_tap'))
+        d.createObjectStore('log_tap', { autoIncrement: true });
+      if (!d.objectStoreNames.contains('config'))
+        d.createObjectStore('config', { keyPath: 'k' });
+    };
+    req.onsuccess = () => { db = req.result; ok(db); };
+    req.onerror = () => ko(req.error);
+  });
+}
+
+function tx(store, mode, fn) {
+  return new Promise((ok, ko) => {
+    const t = db.transaction(store, mode);
+    const s = t.objectStore(store);
+    const res = fn(s);
+    t.oncomplete = () => ok(res && res.result !== undefined ? res.result : undefined);
+    t.onerror = () => ko(t.error);
+  });
+}
+
+const getCliente   = (uid) => tx('clienti', 'readonly',  s => s.get(uid));
+const salvaCliente = (c)   => tx('clienti', 'readwrite', s => s.put(c));
+const cancellaCliente = (uid) => tx('clienti', 'readwrite', s => s.delete(uid));
+const tuttiClienti = ()    => tx('clienti', 'readonly',  s => s.getAll());
+const logTap       = (uid) => tx('log_tap', 'readwrite', s => s.add({ uid, timestamp: Date.now() }));
+const tuttiLog     = ()    => tx('log_tap', 'readonly',  s => s.getAll());
+
+async function getConfig(k, def) {
+  const r = await tx('config', 'readonly', s => s.get(k));
+  return r ? r.v : def;
+}
+const setConfig = (k, v) => tx('config', 'readwrite', s => s.put({ k, v }));
+
+// ================== SCHERMATE ==================
+function mostra(id) {
+  document.querySelectorAll('.schermata').forEach(s => s.classList.remove('attiva'));
+  document.getElementById(id).classList.add('attiva');
+}
+
+let timerRitorno = null;
+function tornaARiposoTra(ms) {
+  clearTimeout(timerRitorno);
+  timerRitorno = setTimeout(() => mostra('schermata-riposo'), ms);
+}
+
+function toast(msg, ms = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('visibile');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('visibile'), ms);
+}
+
+// ================== WEB NFC ==================
+let scanAttiva = false;
+
+async function avviaScan() {
+  if (!('NDEFReader' in window)) {
+    toast('⚠️ Web NFC non supportato: serve Chrome su Android');
+    return;
+  }
+  try {
+    const reader = new NDEFReader();
+    await reader.scan();
+    scanAttiva = true;
+    aggiornaStatoScan();
+    reader.onreading = (e) => gestisciTap(e.serialNumber);
+    reader.onreadingerror = () => toast('Lettura fallita, riprova ad appoggiare la paperella');
+  } catch (err) {
+    toast('Errore NFC: ' + err.message, 4000);
+  }
+}
+
+function aggiornaStatoScan() {
+  const el = document.getElementById('stato-scan');
+  const btn = document.getElementById('btn-avvia');
+  if (scanAttiva) {
+    el.textContent = '● Scansione attiva';
+    el.className = 'stato-scan on pulse';
+    btn.style.display = 'none';
+  } else {
+    el.textContent = 'Scansione non attiva';
+    el.className = 'stato-scan off';
+    btn.style.display = '';
+  }
+}
+
+// ================== LOGICA TAP ==================
+let tapInCorso = false;
+
+async function gestisciTap(uid) {
+  if (!uid || tapInCorso) return;
+  tapInCorso = true;
+  try {
+    let c = await getCliente(uid);
+    const ora = Date.now();
+
+    if (!c) {
+      c = { uid, nome: '', punti: 0, creato: ora, ultimo_tap: 0 };
+    }
+
+    const cooldownMs = COOLDOWN_ORE * 3600 * 1000;
+    if (c.ultimo_tap && (ora - c.ultimo_tap) < cooldownMs) {
+      mostraTap(c, false);
+      tornaARiposoTra(TIMEOUT_RITORNO_MS);
+      return;
+    }
+
+    c.punti += 1;
+    c.ultimo_tap = ora;
+    await logTap(uid);
+
+    if (c.punti >= PUNTI_PREMIO) {
+      c.punti = 0;
+      await salvaCliente(c);
+      mostra('schermata-premio');
+      tornaARiposoTra(8000);
+    } else {
+      await salvaCliente(c);
+      mostraTap(c, true);
+      tornaARiposoTra(TIMEOUT_RITORNO_MS);
+    }
+  } catch (err) {
+    toast('Errore: ' + err.message, 4000);
+  } finally {
+    setTimeout(() => { tapInCorso = false; }, 1500);
+  }
+}
+
+function mostraTap(c, nuovoPunto) {
+  const nome = c.nome ? `Ciao ${c.nome}!` : 'Ciao!';
+  document.getElementById('tap-titolo').textContent = nome;
+  document.getElementById('tap-punti').textContent = `${c.punti}/${PUNTI_PREMIO}`;
+  document.getElementById('tap-msg').textContent = nuovoPunto
+    ? (c.punti === PUNTI_PREMIO - 1 ? 'Il prossimo è il PREMIO! 🎁' : '+1 punto! A presto 💅')
+    : 'Punto già registrato, torna più tardi 😉';
+
+  const cont = document.getElementById('tap-timbri');
+  cont.innerHTML = '';
+  for (let i = 1; i <= PUNTI_PREMIO; i++) {
+    const d = document.createElement('div');
+    d.className = 'timbro' + (i <= c.punti ? ' pieno' : '') +
+                  (nuovoPunto && i === c.punti ? ' nuovo' : '');
+    d.textContent = '🦆';
+    cont.appendChild(d);
+  }
+  mostra('schermata-tap');
+}
+
+// ================== ADMIN ==================
+let tapAngolo = 0, timerAngolo = null;
+
+document.getElementById('ingresso-admin').addEventListener('click', () => {
+  tapAngolo++;
+  clearTimeout(timerAngolo);
+  timerAngolo = setTimeout(() => { tapAngolo = 0; }, 2000);
+  if (tapAngolo >= 5) { tapAngolo = 0; chiediPin(); }
+});
+
+async function chiediPin() {
+  const pin = await getConfig('pin', PIN_DEFAULT);
+  const inserito = prompt('PIN amministratore:');
+  if (inserito === null) return;
+  if (inserito === pin) apriAdmin();
+  else toast('PIN errato');
+}
+
+async function cambiaPin() {
+  const nuovo = prompt('Nuovo PIN (min 4 cifre):');
+  if (!nuovo || nuovo.length < 4) { toast('PIN troppo corto'); return; }
+  await setConfig('pin', nuovo);
+  toast('PIN aggiornato ✔');
+}
+
+async function apriAdmin() {
+  clearTimeout(timerRitorno);
+  await disegnaTabella();
+  mostra('schermata-admin');
+}
+
+function chiudiAdmin() {
+  mostra('schermata-riposo');
+}
+
+function formattaData(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) +
+         ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function disegnaTabella() {
+  const clienti = (await tuttiClienti()) || [];
+  clienti.sort((a, b) => (b.ultimo_tap || 0) - (a.ultimo_tap || 0));
+  const corpo = document.getElementById('tabella-clienti');
+  corpo.innerHTML = '';
+
+  if (!clienti.length) {
+    corpo.innerHTML = '<tr><td colspan="4" class="vuoto">Nessun cliente ancora 🦆</td></tr>';
+    return;
+  }
+
+  for (const c of clienti) {
+    const tr = document.createElement('tr');
+
+    const tdNome = document.createElement('td');
+    const inp = document.createElement('input');
+    inp.className = 'nome-input';
+    inp.placeholder = 'nome…';
+    inp.value = c.nome || '';
+    inp.onchange = async () => { c.nome = inp.value.trim(); await salvaCliente(c); toast('Nome salvato'); };
+    tdNome.appendChild(inp);
+    const divUid = document.createElement('div');
+    divUid.className = 'uid';
+    divUid.textContent = c.uid;
+    tdNome.appendChild(divUid);
+
+    const tdPunti = document.createElement('td');
+    tdPunti.className = 'cella-punti';
+    tdPunti.textContent = `${c.punti}/${PUNTI_PREMIO}`;
+
+    const tdData = document.createElement('td');
+    tdData.textContent = formattaData(c.ultimo_tap);
+
+    const tdAzioni = document.createElement('td');
+    tdAzioni.style.whiteSpace = 'nowrap';
+    const btnMeno = mini('−', async () => {
+      c.punti = Math.max(0, c.punti - 1);
+      await salvaCliente(c); await disegnaTabella();
+    });
+    const btnPiu = mini('+', async () => {
+      c.punti = Math.min(PUNTI_PREMIO - 1, c.punti + 1);
+      await salvaCliente(c); await disegnaTabella();
+    });
+    const btnDel = mini('🗑', async () => {
+      if (confirm(`Eliminare ${c.nome || c.uid}?`)) {
+        await cancellaCliente(c.uid); await disegnaTabella();
+      }
+    });
+    btnDel.classList.add('rosso');
+    tdAzioni.append(btnMeno, btnPiu, btnDel);
+
+    tr.append(tdNome, tdPunti, tdData, tdAzioni);
+    corpo.appendChild(tr);
+  }
+}
+
+function mini(txt, fn) {
+  const b = document.createElement('button');
+  b.className = 'mini-btn';
+  b.textContent = txt;
+  b.onclick = fn;
+  return b;
+}
+
+// ================== BACKUP ==================
+async function esportaBackup() {
+  const dati = {
+    versione: 1,
+    esportato: new Date().toISOString(),
+    clienti: await tuttiClienti(),
+    log_tap: await tuttiLog()
+  };
+  const json = JSON.stringify(dati, null, 2);
+  const nomeFile = 'paperelle-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  const blob = new Blob([json], { type: 'application/json' });
+  const file = new File([blob], nomeFile, { type: 'application/json' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Backup paperelle' });
+      return;
+    } catch (e) { /* utente ha annullato → fallback download */ }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nomeFile;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importaBackup(input) {
+  const f = input.files[0];
+  if (!f) return;
+  try {
+    const dati = JSON.parse(await f.text());
+    if (!Array.isArray(dati.clienti)) throw new Error('formato non valido');
+    if (!confirm(`Importare ${dati.clienti.length} clienti? I dati esistenti con stesso UID verranno sovrascritti.`)) return;
+    for (const c of dati.clienti) await salvaCliente(c);
+    await disegnaTabella();
+    toast(`Importati ${dati.clienti.length} clienti ✔`);
+  } catch (err) {
+    toast('Import fallito: ' + err.message, 4000);
+  } finally {
+    input.value = '';
+  }
+}
+
+// ================== WAKE LOCK ==================
+let wakeLock = null;
+async function tieniSchermoAcceso() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (e) { /* non critico */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') tieniSchermoAcceso();
+});
+
+// ================== AVVIO ==================
+document.getElementById('btn-avvia').addEventListener('click', async () => {
+  await avviaScan();
+  await tieniSchermoAcceso();
+});
+
+apriDB().catch(err => toast('Errore database: ' + err.message, 5000));
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
