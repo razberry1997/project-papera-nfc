@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f8b4d9">
+<title>Gestione — Paperelle 🦆</title>
+<link rel="stylesheet" href="stile.css">
+</head>
+<body>
+<div class="contenuto">
+
+  <!-- login -->
+  <div id="vista-login" class="centro">
+    <img class="logo-img mini" src="logo.png" alt="logo">
+    <h1>Accesso gestione</h1>
+    <p class="sottotitolo">Inserisci la chiave del negozio</p>
+    <input type="password" id="campo-token" placeholder="chiave admin" autocomplete="current-password">
+    <button class="btn" onclick="accedi()">Entra</button>
+    <div class="nav"><a href="index.html">← Torna al sito</a></div>
+  </div>
+
+  <!-- pannello -->
+  <div id="vista-admin" hidden>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h1 style="font-size:22px;margin:0">Clienti</h1>
+      <button class="mini-btn" onclick="logout()" title="Esci">⏻</button>
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn piccolo" onclick="scaricaBackup()">⬇️ Backup</button>
+      <button class="btn piccolo secondario" onclick="document.getElementById('file-import').click()">⬆️ Importa</button>
+      <a class="btn piccolo secondario" href="kiosk.html">🦆 Postazione</a>
+      <input type="file" id="file-import" accept=".json" hidden onchange="importa(this)">
+    </div>
+
+    <table>
+      <thead><tr><th>Cliente</th><th>Punti</th><th>Ultimo</th><th></th></tr></thead>
+      <tbody id="tabella"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script src="api.js"></script>
+<script>
+'use strict';
+
+function mostraPannello() {
+  document.getElementById('vista-login').hidden = true;
+  document.getElementById('vista-admin').hidden = false;
+  carica();
+}
+
+async function accedi() {
+  const t = document.getElementById('campo-token').value.trim();
+  if (!t) return;
+  setToken(t);
+  try {
+    await chiamaAPI('/clienti');
+    mostraPannello();
+  } catch {
+    localStorage.removeItem('admin_token');
+    toast('Chiave non valida');
+  }
+}
+
+document.getElementById('campo-token').addEventListener('keydown', e => {
+  if (e.key === 'Enter') accedi();
+});
+
+async function carica() {
+  try {
+    const clienti = await chiamaAPI('/clienti');
+    const corpo = document.getElementById('tabella');
+    corpo.innerHTML = '';
+    if (!clienti.length) {
+      corpo.innerHTML = '<tr><td colspan="4" class="vuoto">Nessun cliente ancora 🦆</td></tr>';
+      return;
+    }
+    for (const c of clienti) {
+      const tr = document.createElement('tr');
+
+      const tdNome = document.createElement('td');
+      const inp = document.createElement('input');
+      inp.className = 'nome-input';
+      inp.placeholder = 'nome…';
+      inp.value = c.nome || '';
+      inp.onchange = async () => {
+        await chiamaAPI('/correggi', { method: 'POST', body: JSON.stringify({ uid: c.uid, nome: inp.value.trim() }) });
+        toast('Nome salvato');
+      };
+      const divUid = document.createElement('div');
+      divUid.className = 'uid';
+      divUid.textContent = c.uid;
+      tdNome.append(inp, divUid);
+
+      const tdPunti = document.createElement('td');
+      tdPunti.className = 'cella-punti';
+      tdPunti.textContent = `${c.punti}/${PUNTI_PREMIO}`;
+
+      const tdData = document.createElement('td');
+      tdData.textContent = formattaData(c.ultimo_tap);
+
+      const tdAz = document.createElement('td');
+      tdAz.style.whiteSpace = 'nowrap';
+      tdAz.append(
+        mini('−', () => correggi(c.uid, Math.max(0, c.punti - 1))),
+        mini('+', () => correggi(c.uid, Math.min(PUNTI_PREMIO - 1, c.punti + 1))),
+        mini('🗑', async () => {
+          if (!confirm(`Eliminare ${c.nome || c.uid}?`)) return;
+          await chiamaAPI('/correggi', { method: 'POST', body: JSON.stringify({ uid: c.uid, elimina: true }) });
+          carica();
+        }, true)
+      );
+
+      tr.append(tdNome, tdPunti, tdData, tdAz);
+      corpo.appendChild(tr);
+    }
+  } catch (e) { toast('Errore: ' + e.message, 4000); }
+}
+
+function mini(txt, fn, rosso) {
+  const b = document.createElement('button');
+  b.className = 'mini-btn' + (rosso ? ' rosso' : '');
+  b.textContent = txt;
+  b.onclick = fn;
+  return b;
+}
+
+async function correggi(uid, punti) {
+  await chiamaAPI('/correggi', { method: 'POST', body: JSON.stringify({ uid, punti }) });
+  carica();
+}
+
+async function scaricaBackup() {
+  const dati = await chiamaAPI('/backup');
+  const blob = new Blob([JSON.stringify(dati, null, 2)], { type: 'application/json' });
+  const nome = 'paperelle-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  const file = new File([blob], nome, { type: 'application/json' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Backup paperelle' }); return; } catch {}
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nome;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importa(input) {
+  const f = input.files[0];
+  if (!f) return;
+  try {
+    const dati = JSON.parse(await f.text());
+    if (!Array.isArray(dati.clienti)) throw new Error('formato non valido');
+    if (!confirm(`Importare ${dati.clienti.length} clienti?`)) return;
+    const r = await chiamaAPI('/importa', { method: 'POST', body: JSON.stringify(dati) });
+    toast(`Importati ${r.clienti} clienti ✔`);
+    carica();
+  } catch (e) { toast('Import fallito: ' + e.message, 4000); }
+  finally { input.value = ''; }
+}
+
+if (getToken()) mostraPannello();
+</script>
+</body>
+</html>

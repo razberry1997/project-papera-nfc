@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f8b4d9">
+<title>Postazione — Paperelle 🦆</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="stile.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body { user-select: none; }
+  .schermata {
+    position: absolute; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+  }
+  .schermata.attiva { display: flex; }
+  #schermata-tap { background: linear-gradient(160deg, var(--rosa), #fbcfe8); }
+  #schermata-premio { background: linear-gradient(160deg, #fde68a, var(--rosa)); }
+  .premio-emoji { font-size: 100px; animation: festa .6s ease infinite alternate; }
+  @keyframes festa { from { transform: rotate(-8deg) scale(1); } to { transform: rotate(8deg) scale(1.15); } }
+  .stato-scan { margin-top: 16px; font-size: 15px; font-weight: 600; padding: 8px 18px; border-radius: 999px; background: #fff; }
+  .stato-scan.on { color: var(--verde); animation: pulse 1.6s ease-in-out infinite; }
+  .stato-scan.off { color: #b91c1c; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+  #ingresso-admin { position: fixed; bottom: 0; right: 0; width: 64px; height: 64px; opacity: 0; z-index: 50; }
+  .coda { position: fixed; top: 8px; left: 8px; font-size: 12px; opacity: .6; }
+</style>
+</head>
+<body>
+
+<div id="schermata-riposo" class="schermata attiva">
+  <img class="logo-img galleggia" src="logo.png" alt="logo">
+  <h1>Appoggia la tua paperella</h1>
+  <p class="sottotitolo">e colleziona i tuoi punti 💅</p>
+  <button id="btn-avvia" class="btn">Avvia scansione</button>
+  <div id="stato-scan" class="stato-scan off">Scansione non attiva</div>
+</div>
+
+<div id="schermata-tap" class="schermata">
+  <img class="logo-img mini" src="logo.png" alt="logo">
+  <h1 id="tap-titolo">Ciao!</h1>
+  <div class="punti-num" id="tap-punti">0/10</div>
+  <div class="timbri" id="tap-timbri"></div>
+  <p class="sottotitolo" id="tap-msg"></p>
+</div>
+
+<div id="schermata-premio" class="schermata">
+  <div class="premio-emoji">🎉</div>
+  <h1>PREMIO!</h1>
+  <p class="sottotitolo" style="font-size:20px">Tessera completata!<br>Ritira il tuo premio 🎁</p>
+</div>
+
+<div id="ingresso-admin"></div>
+<div class="coda" id="coda"></div>
+
+<script src="api.js"></script>
+<script>
+'use strict';
+const TIMEOUT_RITORNO_MS = 5000;
+
+// ---- schermate ----
+function mostra(id) {
+  document.querySelectorAll('.schermata').forEach(s => s.classList.remove('attiva'));
+  document.getElementById(id).classList.add('attiva');
+}
+let timerRitorno = null;
+const tornaARiposoTra = (ms) => {
+  clearTimeout(timerRitorno);
+  timerRitorno = setTimeout(() => mostra('schermata-riposo'), ms);
+};
+
+// ---- coda offline ----
+const leggiCoda = () => JSON.parse(localStorage.getItem('coda_tap') || '[]');
+const scriviCoda = (c) => {
+  localStorage.setItem('coda_tap', JSON.stringify(c));
+  document.getElementById('coda').textContent = c.length ? `⏳ ${c.length} tap da sincronizzare` : '';
+};
+
+async function sincronizzaCoda() {
+  const coda = leggiCoda();
+  if (!coda.length || !navigator.onLine) return;
+  const rimasti = [];
+  for (const t of coda) {
+    try { await chiamaAPI('/tap', { method: 'POST', body: JSON.stringify({ uid: t.uid }) }); }
+    catch { rimasti.push(t); }
+  }
+  scriviCoda(rimasti);
+  if (!rimasti.length && coda.length) toast('Tap sincronizzati ✔');
+}
+
+// ---- NFC ----
+let scanAttiva = false, tapInCorso = false;
+
+async function avviaScan() {
+  if (!('NDEFReader' in window)) { toast('⚠️ Serve Chrome su Android'); return; }
+  try {
+    const reader = new NDEFReader();
+    await reader.scan();
+    scanAttiva = true;
+    aggiornaStato();
+    reader.onreading = (e) => gestisciTap(e.serialNumber);
+    reader.onreadingerror = () => toast('Lettura fallita, riprova');
+  } catch (err) { toast('Errore NFC: ' + err.message, 4000); }
+}
+
+function aggiornaStato() {
+  const el = document.getElementById('stato-scan');
+  const btn = document.getElementById('btn-avvia');
+  el.textContent = scanAttiva ? '● Scansione attiva' : 'Scansione non attiva';
+  el.className = 'stato-scan ' + (scanAttiva ? 'on' : 'off');
+  btn.style.display = scanAttiva ? 'none' : '';
+}
+
+async function gestisciTap(serial) {
+  const uid = normUid(serial);
+  if (uid.length < 8 || tapInCorso) return;
+  tapInCorso = true;
+  try {
+    const r = await chiamaAPI('/tap', { method: 'POST', body: JSON.stringify({ uid }) });
+    if (r.esito === 'premio') {
+      mostra('schermata-premio');
+      tornaARiposoTra(8000);
+    } else {
+      document.getElementById('tap-titolo').textContent = r.nome ? `Ciao ${r.nome}!` : 'Ciao!';
+      document.getElementById('tap-punti').textContent = `${r.punti}/${r.obiettivo}`;
+      disegnaTimbri(document.getElementById('tap-timbri'), r.punti, r.esito === 'punto');
+      document.getElementById('tap-msg').textContent =
+        r.esito === 'cooldown' ? 'Punto già registrato, torna più tardi 😉'
+        : r.punti === r.obiettivo - 1 ? 'Il prossimo è il PREMIO! 🎁'
+        : '+1 punto! A presto 💅';
+      mostra('schermata-tap');
+      tornaARiposoTra(TIMEOUT_RITORNO_MS);
+    }
+  } catch (err) {
+    // offline o server irraggiungibile → metti in coda
+    const coda = leggiCoda();
+    coda.push({ uid, quando: Date.now() });
+    scriviCoda(coda);
+    document.getElementById('tap-titolo').textContent = 'Ciao!';
+    document.getElementById('tap-punti').textContent = '✔';
+    document.getElementById('tap-timbri').innerHTML = '';
+    document.getElementById('tap-msg').textContent = 'Punto registrato (offline), verrà sincronizzato';
+    mostra('schermata-tap');
+    tornaARiposoTra(TIMEOUT_RITORNO_MS);
+  } finally {
+    setTimeout(() => { tapInCorso = false; }, 1500);
+  }
+}
+
+// ---- wake lock ----
+async function tieniSchermoAcceso() {
+  try { if ('wakeLock' in navigator) await navigator.wakeLock.request('screen'); } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { tieniSchermoAcceso(); sincronizzaCoda(); }
+});
+
+// ---- admin: 5 tap sull'angolo ----
+let tapAngolo = 0, timerAngolo = null;
+document.getElementById('ingresso-admin').addEventListener('click', () => {
+  tapAngolo++;
+  clearTimeout(timerAngolo);
+  timerAngolo = setTimeout(() => { tapAngolo = 0; }, 2000);
+  if (tapAngolo >= 5) { tapAngolo = 0; location.href = 'admin.html'; }
+});
+
+// ---- avvio ----
+document.getElementById('btn-avvia').addEventListener('click', async () => {
+  if (!getToken()) { toast('Prima accedi come admin (5 tap in basso a destra)', 4000); return; }
+  await avviaScan();
+  await tieniSchermoAcceso();
+});
+
+scriviCoda(leggiCoda());
+sincronizzaCoda();
+setInterval(sincronizzaCoda, 60000);
+window.addEventListener('online', sincronizzaCoda);
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

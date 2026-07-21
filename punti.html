@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f8b4d9">
+<title>I miei punti 🦆</title>
+<link rel="stylesheet" href="stile.css">
+</head>
+<body>
+<div class="contenuto centro">
+
+  <img class="logo-img mini" src="logo.png" alt="logo">
+
+  <!-- caricamento -->
+  <div id="vista-carico">
+    <h1>Un attimo…</h1>
+    <p class="sottotitolo">sto leggendo la tua tessera 🫧</p>
+  </div>
+
+  <!-- punti -->
+  <div id="vista-punti" hidden>
+    <h1 id="titolo">La tua tessera</h1>
+    <div class="punti-num" id="numero">0/10</div>
+    <div class="timbri" id="timbri"></div>
+    <p class="sottotitolo" id="messaggio"></p>
+    <a class="btn secondario piccolo" href="index.html">Come funziona</a>
+  </div>
+
+  <!-- nessun uid -->
+  <div id="vista-vuota" hidden>
+    <h1>Ciao! 🦆</h1>
+    <p class="sottotitolo">Per vedere i tuoi punti, avvicina la paperella al retro del telefono (con l'NFC acceso).</p>
+    <div class="card" style="text-align:left">
+      <p class="piccolo">Non hai ancora una paperella? Chiedila in negozio alla tua prossima visita.</p>
+    </div>
+    <a class="btn" href="index.html">Scopri il programma</a>
+  </div>
+
+</div>
+
+<script src="api.js"></script>
+<script>
+(async () => {
+  const uid = normUid(new URLSearchParams(location.search).get('id'));
+  const mostra = (id) => {
+    ['vista-carico', 'vista-punti', 'vista-vuota'].forEach(v =>
+      document.getElementById(v).hidden = (v !== id));
+  };
+
+  if (uid.length < 8) { mostra('vista-vuota'); return; }
+
+  try {
+    const r = await chiamaAPI('/punti?uid=' + uid);
+    document.getElementById('numero').textContent = `${r.punti}/${r.obiettivo}`;
+    disegnaTimbri(document.getElementById('timbri'), r.punti);
+    const mancanti = r.obiettivo - r.punti;
+    document.getElementById('messaggio').textContent =
+      r.punti === 0 ? 'Tessera nuova: la prossima visita vale il primo timbro!'
+      : mancanti === 1 ? 'Manca una sola visita al premio! 🎁'
+      : `Ti mancano ${mancanti} visite al premio 💅`;
+    mostra('vista-punti');
+  } catch (e) {
+    document.getElementById('vista-carico').innerHTML =
+      '<h1>Ops</h1><p class="sottotitolo">Non riesco a leggere la tessera. Controlla la connessione e riprova.</p>';
+  }
+})();
+</script>
+</body>
+</html>
