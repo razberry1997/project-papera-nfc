@@ -59,9 +59,16 @@ async function accedi() {
   try {
     await chiamaAPI('/clienti');
     mostraPannello();
-  } catch {
+  } catch (e) {
     localStorage.removeItem('admin_token');
-    toast('Chiave non valida');
+    const msg = String(e.message || e);
+    if (msg.includes('non autorizzato') || msg.includes('401')) {
+      toast('Chiave errata: controlla ADMIN_TOKEN su Cloudflare', 5000);
+    } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) {
+      toast('Bloccato dal server: controlla la variabile ORIGINE su Cloudflare (senza / finale)', 6000);
+    } else {
+      toast('Errore: ' + msg, 6000);
+    }
   }
 }
 
