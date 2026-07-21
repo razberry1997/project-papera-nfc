@@ -42,7 +42,8 @@
 <script src="api.js"></script>
 <script>
 (async () => {
-  const uid = normUid(new URLSearchParams(location.search).get('id'));
+  const q = new URLSearchParams(location.search);
+  const uid = normUid(q.get('id') || q.get('uid'));
   const mostra = (id) => {
     ['vista-carico', 'vista-punti', 'vista-vuota'].forEach(v =>
       document.getElementById(v).hidden = (v !== id));

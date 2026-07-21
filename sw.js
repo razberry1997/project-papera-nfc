@@ -1,5 +1,5 @@
 // Service worker: cache-first per i file statici, rete per le API
-const CACHE = 'paperelle-v6';
+const CACHE = 'paperelle-v7';
 const FILES = [
   './', './index.html', './punti.html', './kiosk.html', './admin.html', './info.html',
   './stile.css', './api.js', './manifest.webmanifest',
